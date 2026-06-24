@@ -10,7 +10,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:8000",
+        // Use 127.0.0.1 (not "localhost") so the proxy always hits the
+        // backend's IPv4 listener — on Windows "localhost" can resolve to IPv6
+        // (::1) first, which the backend isn't bound to, causing the proxy to
+        // fall back to serving index.html for /api requests.
+        target: "http://127.0.0.1:8000",
         changeOrigin: true,
       },
     },
