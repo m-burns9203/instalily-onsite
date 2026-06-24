@@ -133,7 +133,11 @@ frontend/
 filter, sort, and a "Hot only" toggle; KPI cards; per-lead score rings and
 Hot/Warm/Nurture bands. Each lead opens a sales brief organized the way a rep
 actually works a call: *why now → what to pitch → talking points → outreach →
-profile → sources*.
+profile → sources*. Every score is **explainable** — the lead page shows a
+"why this score" breakdown of the exact factor contributions (the ring always
+equals the sum of the bars). The dashboard degrades gracefully too: API errors
+surface a banner instead of an infinite spinner, and a triggered run is tracked
+to completion via `/api/runs/latest` rather than a blind timer.
 
 **2. Robust data management.** Ground-truth scraped facts (`Lead`) are kept
 separate from regenerable AI output (`Enrichment`), so re-enriching never risks
@@ -146,10 +150,13 @@ full audit trail. SQLite is the zero-config default; the identical code runs on
 **3. Scalable pipeline.** Scraping and enrichment are **decoupled** so they
 scale independently. Enrichment is driven by a durable **job queue**
 (`EnrichmentJob` rows) processed with **bounded concurrency** (a semaphore that
-respects provider rate limits), **retries with exponential backoff**, and
-**per-lead failure isolation** (one bad lead never aborts the run). The queue
-lives in the database, so the design is a drop-in seam for a distributed worker
-fleet — see below.
+respects provider rate limits), **bounded retries with exponential backoff**
+(each lead is retried up to `enrich_max_attempts`, recording `attempts` and the
+last error on the job), and **per-lead failure isolation** (one bad lead never
+aborts the run). Today a single in-process worker pool drains the queue; because
+the work-list lives in the database, the same rows support a multi-worker fleet
+where each worker **atomically claims** a job (`SELECT ... FOR UPDATE SKIP
+LOCKED` on Postgres) — a drop-in seam for a distributed queue, see below.
 
 ### Scaling to thousands of reps (production evolution)
 
