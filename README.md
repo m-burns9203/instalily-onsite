@@ -50,6 +50,13 @@ make frontend       # terminal 2: UI  at http://localhost:5173
 
 Open **http://localhost:5173**.
 
+> **Windows (no `make`):** create the venv with
+> `python -m venv backend\.venv`, install with
+> `backend\.venv\Scripts\pip install -r backend\requirements.txt`, then run the
+> backend `cd backend && .venv\Scripts\python -m uvicorn app.main:app --port 8000`
+> and the pipeline `.venv\Scripts\python -m scripts.run_pipeline`. Frontend is
+> `cd frontend && npm install && npm run dev`.
+
 ### Running it for real (live GAF + AI)
 
 The app runs **fully offline in mock mode** out of the box (deterministic
@@ -66,11 +73,32 @@ With both keys present the app automatically leaves mock mode (see
 `config.py: effective_mock_mode`). The "Run pipeline" button in the UI triggers
 a fresh scrape + enrichment run.
 
-> **Note on this submission's sandbox:** the cloud environment it was built in
-> blocks outbound calls to `gaf.com`, `api.openai.com`, and `api.perplexity.ai`
-> at the network-policy level, so the live path is exercised on your machine.
-> The scraper degrades gracefully to the seed dataset if the network is
-> unavailable, and the entire pipeline/UI is otherwise identical live vs. mock.
+### How the live GAF scrape works
+
+GAF's public contractor directory is **not** a simple HTML page — it's a
+JavaScript app behind an Akamai bot-management edge, backed by **Coveo**
+(search-as-a-service). Rather than render the page in a headless browser, the
+scraper talks to the same **Coveo REST Search API** the site itself calls:
+
+1. **Geocode** the target ZIP to lat/long (`api.zippopotam.us`, with an offline
+   fallback for the case-study ZIP).
+2. **Query Coveo** for `Residential` contractors, using a distance query
+   function over each contractor's coordinates to filter to the radius and sort
+   nearest-first, paginating through results.
+3. **Normalize** each result, using GAF's stable `contractor_id` as the
+   idempotency key.
+
+This returns clean, structured JSON (name, certification tier, rating, reviews,
+phone, location) — far more robust than scraping rendered HTML, and the natural
+production choice. Requests use browser-like headers (Akamai rejects thin
+clients) and `brotli` decoding. If anything in the live path fails (network,
+credential rotation, geocode miss), the scraper logs and falls back to the seed
+dataset rather than aborting the run, so the pipeline/UI are identical live vs.
+mock.
+
+> The Coveo credentials in `config.py` are the public, search-only keys GAF
+> ships in its page HTML to every visitor — not secrets — kept as
+> env-overridable config in case GAF rotates them.
 
 ---
 
@@ -85,7 +113,7 @@ backend/
     repository.py      # data-access layer (idempotent upsert, queries, stats)
     scoring.py         # transparent lead-scoring heuristic
     schemas.py         # Pydantic API contracts
-    scraper/gaf.py     # GAF scraper (API → embedded-JSON fallback → seed)
+    scraper/gaf.py     # GAF scraper (Coveo Search API + ZIP geocode → seed fallback)
     enrichment/        # clients (OpenAI+Perplexity), prompts, enricher (+mock)
     pipeline/          # async orchestrator: scrape → queue → bounded-concurrency enrich
     api/               # FastAPI routes: /leads, /stats, /pipeline/run, /runs/latest

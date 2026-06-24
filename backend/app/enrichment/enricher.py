@@ -42,6 +42,7 @@ class Enricher:
             zip_code=lead.get("zip_code", ""),
             website=lead.get("website") or "unknown",
             certification=lead.get("certification") or "none",
+            gaf_profile_url=lead.get("source_url") or "unknown",
         )
         research_text, citations = self.clients.research(research_prompt)
 

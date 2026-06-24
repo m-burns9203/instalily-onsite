@@ -13,13 +13,22 @@ import json
 from typing import Any
 
 RESEARCH_PROMPT = """You are a B2B sales researcher for a roofing-materials \
-distributor. Research the following roofing contractor and report concise, \
-factual, up-to-date findings. Prefer recent and verifiable information.
+distributor whose customers are roofing contractors. Research THIS SPECIFIC \
+roofing contractor and report concise, factual, up-to-date findings. Prefer \
+recent and verifiable information.
 
 Contractor: {name}
 Location: {city}, {state} {zip_code}
-Website: {website}
 GAF certification: {certification}
+GAF profile (authoritative identity anchor): {gaf_profile_url}
+Website: {website}
+
+CRITICAL: Research ONLY this exact company at this location. If you cannot find \
+reliable information about this specific contractor, say so explicitly — do NOT \
+substitute, describe, or infer details from a DIFFERENT company with a similar \
+name. Reporting "limited public information available" is far better than \
+reporting facts about the wrong business (e.g. another company's phone number, \
+owners, or reviews).
 
 Report on:
 - Company size (employees / crews) and years in business, if known.
@@ -29,15 +38,28 @@ metal, solar, etc.).
 - Any recent activity: expansion, hiring, new locations, awards, reviews, \
 press, or storm-response work in the last 12-18 months.
 - Likely material volume / scale of operations.
+- Names and titles of owners / key decision-makers, only if found for THIS company.
 
-Be concise and specific. If something is unknown, say so rather than guessing."""
+Be concise and specific. Clearly separate verified facts from inference. If \
+something is unknown, say so rather than guessing."""
 
 
 STRUCTURING_SYSTEM = """You are a sales-intelligence analyst for a roofing \
-products distributor. You convert raw research about a roofing contractor into \
-a structured sales brief that helps a distributor sales rep win the account. \
-The contractor is a potential CUSTOMER who buys roofing materials. Respond with \
-ONLY valid JSON matching the requested schema — no prose, no markdown."""
+products distributor that sells GAF roofing systems. You convert raw research \
+about a roofing contractor into a structured sales brief that helps a distributor \
+sales rep win the account. The contractor is a potential CUSTOMER who buys \
+roofing materials.
+
+Rules:
+- recommended_products MUST be GAF product lines/categories the distributor can \
+sell (e.g. GAF Timberline HDZ shingles, GAF roofing systems, underlayment, \
+ventilation accessories, GAF warranties). NEVER recommend competitor brands.
+- Use ONLY the provided research and scraped facts. Do NOT invent phone numbers, \
+people, or details; use "Unknown" where information is unavailable.
+- If the research could not confirm details about this specific contractor, \
+reflect that lower confidence in the summary and keep all claims conservative.
+
+Respond with ONLY valid JSON matching the requested schema — no prose, no markdown."""
 
 
 def build_structuring_prompt(lead: dict[str, Any], research: str) -> str:

@@ -30,6 +30,7 @@ export const bandStyles: Record<ScoreBand, { label: string; chip: string; ring: 
 export const certStyles: Record<string, string> = {
   "Master Elite": "bg-brand-600 text-white",
   "President's Club": "bg-indigo-600 text-white",
+  "Certified Plus": "bg-teal-600 text-white",
   Certified: "bg-brand-100 text-brand-700",
 };
 

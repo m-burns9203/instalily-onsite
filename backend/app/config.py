@@ -25,6 +25,18 @@ class Settings(BaseSettings):
     target_zip: str = "10013"
     search_radius_miles: int = 25
 
+    # --- GAF data source (Coveo Search API) --------------------------------
+    # GAF's public contractor directory is powered by Coveo. These are the
+    # client-side (search-only) credentials GAF ships in the page HTML to every
+    # visitor, so they are not secrets; kept here as env-overridable config in
+    # case GAF rotates them.
+    coveo_org: str = "gafmaterialscorporationproduction3yalqk12"
+    coveo_api_key: str = "xx3cfe6ca4-11f2-45b6-83ad-41e053e06504"
+    coveo_pipeline: str = "prod-gaf-recommended-residential-contractors"
+    # Cap leads ingested per run so a demo/live run is bounded in time + AI
+    # spend. Production would page through all results into the queue.
+    scrape_max_results: int = 60
+
     # --- AI providers ------------------------------------------------------
     openai_api_key: str | None = None
     perplexity_api_key: str | None = None
