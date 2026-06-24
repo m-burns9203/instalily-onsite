@@ -83,24 +83,32 @@ def test_full_pipeline_enriches_and_is_idempotent(db, monkeypatch):
 
 
 def test_enrichment_failure_is_isolated(db, monkeypatch):
-    """A failing lead is marked FAILED and does not abort the whole run."""
+    """A lead that fails every attempt is marked FAILED without aborting the run."""
+    import threading
+
     from app.config import get_settings
     from app.enrichment.enricher import Enricher
-    from app.models import EnrichmentStatus, Lead
+    from app.models import EnrichmentJob, EnrichmentStatus, Lead
     from app.pipeline.orchestrator import PipelineOrchestrator
 
     get_settings.cache_clear()
 
-    calls = {"n": 0}
     original = Enricher.enrich
+    lock = threading.Lock()
+    target = {"name": None}
 
-    def flaky(self, lead):
-        calls["n"] += 1
-        if calls["n"] == 1:  # fail exactly one lead
+    def always_fails_one(self, lead):
+        # Deterministically pick a single lead (the first seen) and fail it on
+        # every attempt, so retries are exhausted and it ends up FAILED.
+        with lock:
+            if target["name"] is None:
+                target["name"] = lead["name"]
+            is_target = lead["name"] == target["name"]
+        if is_target:
             raise RuntimeError("simulated provider error")
         return original(self, lead)
 
-    monkeypatch.setattr(Enricher, "enrich", flaky)
+    monkeypatch.setattr(Enricher, "enrich", always_fails_one)
 
     result = PipelineOrchestrator().run_sync(zip_code="10013", radius=25)
     assert result.failed == 1
@@ -112,3 +120,53 @@ def test_enrichment_failure_is_isolated(db, monkeypatch):
             select(Lead).where(Lead.enrichment_status == EnrichmentStatus.FAILED)
         ).all()
         assert len(failed) == 1
+        # The lead was retried the full budget before being isolated.
+        job = s.scalar(
+            select(EnrichmentJob).where(EnrichmentJob.lead_id == failed[0].id)
+        )
+        assert job.attempts == get_settings().enrich_max_attempts
+        assert job.last_error
+
+
+def test_enrichment_retry_recovers_transient_failure(db, monkeypatch):
+    """A lead that fails once then succeeds is retried and recovered (not FAILED)."""
+    import threading
+
+    from app.config import get_settings
+    from app.enrichment.enricher import Enricher
+    from app.models import EnrichmentJob, EnrichmentStatus, Lead
+    from app.pipeline.orchestrator import PipelineOrchestrator
+
+    get_settings.cache_clear()
+
+    original = Enricher.enrich
+    lock = threading.Lock()
+    target = {"name": None}
+    seen: dict[str, int] = {}
+
+    def flaky_once(self, lead):
+        with lock:
+            if target["name"] is None:
+                target["name"] = lead["name"]
+            is_target = lead["name"] == target["name"]
+            first = False
+            if is_target:
+                seen[lead["name"]] = seen.get(lead["name"], 0) + 1
+                first = seen[lead["name"]] == 1
+        if is_target and first:  # fail only the first attempt for this lead
+            raise RuntimeError("transient provider error")
+        return original(self, lead)
+
+    monkeypatch.setattr(Enricher, "enrich", flaky_once)
+
+    result = PipelineOrchestrator().run_sync(zip_code="10013", radius=25)
+    # The transient failure was retried and recovered — nothing left failed.
+    assert result.failed == 0
+    assert result.enriched == result.discovered
+
+    Session = sessionmaker(bind=db.engine)
+    with Session() as s:
+        lead = s.scalar(select(Lead).where(Lead.name == target["name"]))
+        assert lead.enrichment_status == EnrichmentStatus.ENRICHED
+        job = s.scalar(select(EnrichmentJob).where(EnrichmentJob.lead_id == lead.id))
+        assert job.attempts == 2  # failed once, succeeded on the retry

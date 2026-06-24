@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from .models import DecisionMaker, Enrichment, Lead
-from .scoring import score_band
+from .scoring import score_band, score_components
 
 
 def _loads(value: str | None) -> list[Any]:
@@ -18,6 +18,13 @@ def _loads(value: str | None) -> list[Any]:
         return parsed if isinstance(parsed, list) else [parsed]
     except json.JSONDecodeError:
         return []
+
+
+class ScoreComponentOut(BaseModel):
+    label: str
+    points: int
+    max: int
+    detail: str | None = None
 
 
 class DecisionMakerOut(BaseModel):
@@ -112,17 +119,29 @@ class LeadDetail(LeadSummary):
     source: str | None = None
     source_url: str | None = None
     address: str | None = None
+    score_breakdown: list[ScoreComponentOut] = []
     enrichment: EnrichmentOut | None = None
     decision_makers: list[DecisionMakerOut] = []
 
     @classmethod
     def from_model(cls, lead: Lead) -> "LeadDetail":
         base = LeadSummary.from_model(lead).model_dump()
+        breakdown = score_components(
+            {
+                "certification": lead.certification,
+                "rating": lead.rating,
+                "review_count": lead.review_count,
+                "distance_miles": lead.distance_miles,
+                "phone": lead.phone,
+                "website": lead.website,
+            }
+        )
         return cls(
             **base,
             source=lead.source,
             source_url=lead.source_url,
             address=lead.address,
+            score_breakdown=[ScoreComponentOut(**c) for c in breakdown],
             enrichment=EnrichmentOut.from_model(lead.enrichment)
             if lead.enrichment
             else None,

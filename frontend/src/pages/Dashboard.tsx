@@ -26,6 +26,7 @@ export function Dashboard() {
   const [health, setHealth] = useState<Health | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [cert, setCert] = useState("");
@@ -43,17 +44,29 @@ export function Dashboard() {
   );
 
   async function loadLeads() {
-    const res = await api.leads(query);
-    setLeads(res.items);
-    setTotal(res.total);
+    try {
+      const res = await api.leads(query);
+      setLeads(res.items);
+      setTotal(res.total);
+      setError(null);
+    } catch (e) {
+      setError(`Couldn't load leads (${String(e)})`);
+    }
   }
 
   async function loadAll() {
-    const [s, h] = await Promise.all([api.stats(), api.health()]);
-    setStats(s);
-    setHealth(h);
-    await loadLeads();
-    setLoading(false);
+    try {
+      const [s, h] = await Promise.all([api.stats(), api.health()]);
+      setStats(s);
+      setHealth(h);
+      await loadLeads();
+    } catch (e) {
+      setError(
+        `Couldn't reach the API — is the backend running on :8000? (${String(e)})`
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -72,12 +85,19 @@ export function Dashboard() {
   async function refreshLeads() {
     setRunning(true);
     try {
+      // Note the run we're replacing so we can detect the *new* run finishing.
+      const before = await api.runsLatest().catch(() => null);
       await api.runPipeline(false);
-      // Poll a few times while the background run fills in.
-      for (let i = 0; i < 8; i++) {
-        await new Promise((r) => setTimeout(r, 1200));
+      // Poll the run status, refreshing as it fills in, until the new run
+      // completes (or we hit a safety cap).
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
         await Promise.all([api.stats().then(setStats), loadLeads()]);
+        const run = await api.runsLatest().catch(() => null);
+        if (run && run.run_id !== before?.run_id && run.finished_at) break;
       }
+    } catch (e) {
+      setError(`Pipeline run failed (${String(e)})`);
     } finally {
       setRunning(false);
     }
@@ -113,6 +133,14 @@ export function Dashboard() {
           </button>
         </div>
       </header>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <span aria-hidden>⚠</span>
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Stats */}
       {stats && (

@@ -149,10 +149,14 @@ class EnrichmentJob(Base):
     """Durable work-queue row driving the async enrichment pipeline.
 
     Modeling the queue in the database (rather than only in memory) makes the
-    pipeline crash-safe and horizontally scalable: any worker can claim QUEUED
-    jobs, attempts/errors are recorded, and failed jobs can be retried with
-    backoff. In production this table is the natural seam to swap for
-    Redis/SQS/Celery without changing the orchestration logic.
+    pipeline crash-safe and horizontally scalable. Today a single in-process
+    worker pool processes these rows, retrying each lead up to
+    ``enrich_max_attempts`` with exponential backoff and recording
+    ``attempts``/``last_error``. Because the work-list lives in the table, the
+    same rows support a multi-worker fleet: each worker atomically claims a
+    QUEUED job (``SELECT ... FOR UPDATE SKIP LOCKED`` on Postgres), so this is
+    the natural seam to swap for Redis/SQS/Celery without changing the
+    orchestration logic.
     """
 
     __tablename__ = "enrichment_jobs"

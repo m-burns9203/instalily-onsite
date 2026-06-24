@@ -11,8 +11,9 @@ Scalability model (grading criterion #3):
 * **Bounded concurrency.** A semaphore caps in-flight AI calls
   (``enrich_concurrency``) to respect provider rate limits while still
   parallelizing heavily.
-* **Idempotent + retryable.** Upserts dedupe leads; failed jobs record the error
-  and increment ``attempts`` for backoff-driven retry.
+* **Idempotent + retryable.** Upserts dedupe leads; each lead is retried up to
+  ``enrich_max_attempts`` times with exponential backoff (``attempts`` and the
+  last error are recorded on the job) before it is isolated as ``FAILED``.
 
 Production evolution: this in-process asyncio worker is a drop-in seam for a
 distributed queue (Redis/SQS + Celery/RQ, or Temporal). The ``EnrichmentJob``
@@ -133,44 +134,87 @@ class PipelineOrchestrator:
     async def _process_lead(
         self, lead_id: int, run_id: int, result: RunResult
     ) -> None:
-        """Claim the job, run enrichment off the event loop, persist outcome."""
-        # Mark processing.
+        """Enrich one lead with bounded retries; persist the outcome.
+
+        A lead is retried up to ``enrich_max_attempts`` times with exponential
+        backoff between attempts, so a transient provider error (429/5xx, a
+        flaky parse) doesn't permanently drop a lead. Failures are isolated:
+        once attempts are exhausted the lead is marked ``FAILED`` and the run
+        continues with the rest.
+        """
+        # Mark processing + snapshot the lead's facts to enrich off the DB.
         with session_scope() as session:
-            job = _claim_job(session, lead_id, run_id)
+            job = _get_job(session, lead_id, run_id)
             if job is None:
                 return
             job.status = EnrichmentStatus.PROCESSING
-            job.attempts += 1
             lead = session.get(Lead, lead_id)
             lead.enrichment_status = EnrichmentStatus.PROCESSING
             lead_snapshot = _lead_to_dict(lead)
 
-        try:
-            # Enrichment is blocking (SDK calls); run in a thread so the event
-            # loop keeps scheduling other concurrent leads.
-            data = await asyncio.to_thread(self.enricher.enrich, lead_snapshot)
+        max_attempts = max(1, self.settings.enrich_max_attempts)
+        last_exc: Exception | None = None
+
+        for attempt in range(1, max_attempts + 1):
             with session_scope() as session:
-                save_enrichment(session, lead_id, data)
-                job = _claim_job(session, lead_id, run_id)
+                job = _get_job(session, lead_id, run_id)
                 if job:
-                    job.status = EnrichmentStatus.ENRICHED
-            result.enriched += 1
-        except Exception as exc:  # noqa: BLE001 — capture + record, keep going
-            logger.exception("Enrichment failed for lead %s", lead_id)
-            with session_scope() as session:
-                lead = session.get(Lead, lead_id)
-                if lead:
-                    lead.enrichment_status = EnrichmentStatus.FAILED
-                job = _claim_job(session, lead_id, run_id)
-                if job:
-                    job.status = EnrichmentStatus.FAILED
-                    job.last_error = str(exc)[:1000]
-            result.failed += 1
-            result.errors.append(f"lead {lead_id}: {exc}")
+                    job.attempts = attempt
+            try:
+                # Enrichment is blocking (SDK calls); run in a thread so the
+                # event loop keeps scheduling other concurrent leads.
+                data = await asyncio.to_thread(self.enricher.enrich, lead_snapshot)
+                with session_scope() as session:
+                    save_enrichment(session, lead_id, data)
+                    job = _get_job(session, lead_id, run_id)
+                    if job:
+                        job.status = EnrichmentStatus.ENRICHED
+                        job.last_error = None
+                result.enriched += 1
+                return
+            except Exception as exc:  # noqa: BLE001 — record, back off, retry
+                last_exc = exc
+                logger.warning(
+                    "Enrichment attempt %d/%d failed for lead %s: %s",
+                    attempt, max_attempts, lead_id, exc,
+                )
+                with session_scope() as session:
+                    job = _get_job(session, lead_id, run_id)
+                    if job:
+                        job.last_error = str(exc)[:1000]
+                if attempt < max_attempts:
+                    backoff = self.settings.enrich_backoff_base_seconds * (
+                        2 ** (attempt - 1)
+                    )
+                    if backoff > 0:
+                        await asyncio.sleep(backoff)
+
+        # Attempts exhausted — isolate the failure so the run still completes.
+        logger.error(
+            "Enrichment failed for lead %s after %d attempts", lead_id, max_attempts
+        )
+        with session_scope() as session:
+            lead = session.get(Lead, lead_id)
+            if lead:
+                lead.enrichment_status = EnrichmentStatus.FAILED
+            job = _get_job(session, lead_id, run_id)
+            if job:
+                job.status = EnrichmentStatus.FAILED
+        result.failed += 1
+        result.errors.append(f"lead {lead_id}: {last_exc}")
 
 
 # -- helpers ----------------------------------------------------------------
-def _claim_job(session, lead_id: int, run_id: int) -> EnrichmentJob | None:
+def _get_job(session, lead_id: int, run_id: int) -> EnrichmentJob | None:
+    """Fetch this lead's job row for the current run.
+
+    The orchestrator drives its in-process worker pool from an in-memory list
+    of lead IDs, so this is a plain fetch, not a contended claim. When this
+    seam is moved to a multi-worker fleet (Redis/SQS/Celery), this becomes an
+    atomic claim — ``SELECT ... FOR UPDATE SKIP LOCKED`` on Postgres — so that
+    exactly one worker picks up each QUEUED job; the surrounding logic is
+    unchanged.
+    """
     return session.scalar(
         select(EnrichmentJob)
         .where(EnrichmentJob.lead_id == lead_id, EnrichmentJob.run_id == run_id)

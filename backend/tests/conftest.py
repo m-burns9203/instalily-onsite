@@ -10,3 +10,5 @@ os.environ["MOCK_MODE"] = "true"
 os.environ["DATABASE_URL"] = (
     f"sqlite:///{os.path.join(tempfile.gettempdir(), 'cosailor_test.db')}"
 )
+# Keep retry tests instant — exercise the retry path without real backoff sleeps.
+os.environ["ENRICH_BACKOFF_BASE_SECONDS"] = "0"

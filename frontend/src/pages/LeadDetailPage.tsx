@@ -80,6 +80,30 @@ export function LeadDetailPage() {
               <ScoreRing score={lead.lead_score} />
             </div>
             <span className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Lead score</span>
+            {lead.score_breakdown.length > 0 && (
+              <div className="mt-4 w-48 space-y-2">
+                <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                  Why this score
+                </div>
+                {lead.score_breakdown.map((c) => (
+                  <div key={c.label} title={c.detail ?? undefined}>
+                    <div className="flex items-baseline justify-between gap-2 text-[11px] text-slate-500">
+                      <span className="truncate">{c.label}</span>
+                      <span className="font-semibold text-slate-700">
+                        +{c.points}
+                        <span className="font-normal text-slate-300">/{c.max}</span>
+                      </span>
+                    </div>
+                    <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-brand-500"
+                        style={{ width: `${Math.min(100, (c.points / c.max) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         {e?.summary && <p className="mt-5 leading-relaxed text-slate-700">{e.summary}</p>}

@@ -46,12 +46,32 @@ export interface Enrichment {
   model_version: string | null;
 }
 
+export interface ScoreComponent {
+  label: string;
+  points: number;
+  max: number;
+  detail: string | null;
+}
+
 export interface LeadDetail extends LeadSummary {
   source: string | null;
   source_url: string | null;
   address: string | null;
+  score_breakdown: ScoreComponent[];
   enrichment: Enrichment | null;
   decision_makers: DecisionMaker[];
+}
+
+export interface RunStatus {
+  status: string;
+  run_id?: number;
+  trigger?: string;
+  leads_discovered?: number;
+  leads_new?: number;
+  leads_enriched?: number;
+  leads_failed?: number;
+  started_at?: string | null;
+  finished_at?: string | null;
 }
 
 export interface LeadListResponse {

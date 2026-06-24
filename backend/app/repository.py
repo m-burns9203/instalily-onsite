@@ -108,8 +108,9 @@ def save_enrichment(session: Session, lead_id: int, data: dict[str, Any]) -> Enr
             )
         )
 
-    if data.get("lead_score") is not None:
-        lead.lead_score = data["lead_score"]
+    # The lead score stays the transparent, explainable heuristic
+    # (see scoring.py) — we deliberately do NOT let the LLM silently override
+    # it, so the score always equals the factor breakdown shown to the rep.
     lead.enrichment_status = EnrichmentStatus.ENRICHED
     session.flush()
     return enrichment
