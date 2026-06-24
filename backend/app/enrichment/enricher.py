@@ -111,7 +111,7 @@ def _normalize_enrichment(data: dict[str, Any]) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------
-# Deterministic mock enrichment — realistic output from the lead's own facts.
+# Deterministic mock enrichment - realistic output from the lead's own facts.
 # --------------------------------------------------------------------------
 def _mock_enrichment(lead: dict[str, Any]) -> dict[str, Any]:
     name = lead.get("name", "This contractor")
@@ -145,12 +145,12 @@ def _mock_enrichment(lead: dict[str, Any]) -> dict[str, Any]:
         products.append(
             {
                 "product": "Extended-warranty eligible system components",
-                "reason": "Master Elite status lets them sell GAF's strongest warranties — stock the full system.",
+                "reason": "Master Elite status lets them sell GAF's strongest warranties - stock the full system.",
             }
         )
 
     talking_points = [
-        f"Congratulate them on their {rating}★ rating across {reviews} reviews — clear demand signal.",
+        f"Congratulate them on their {rating}-star rating across {reviews} reviews - clear demand signal.",
         f"Lead with reliable local availability and next-day delivery to {city} job sites.",
         "Offer contractor-tier pricing + a co-branded marketing rebate to win wallet share.",
     ]
@@ -174,7 +174,7 @@ def _mock_enrichment(lead: dict[str, Any]) -> dict[str, Any]:
     return {
         "summary": (
             f"{name} is a {cert or 'local'} roofing contractor based in {city} with a "
-            f"{rating}★ reputation ({reviews} reviews). A strong fit for a "
+            f"{rating}-star reputation ({reviews} reviews). A strong fit for a "
             f"distributor relationship given their {size.split(' ')[0].lower()} scale and steady residential demand."
         ),
         "estimated_size": size,

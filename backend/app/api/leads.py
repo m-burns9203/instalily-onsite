@@ -6,7 +6,14 @@ from sqlalchemy.orm import Session
 
 from .. import repository
 from ..db import get_db
-from ..schemas import LeadDetail, LeadListOut, LeadSummary, StatsOut
+from ..outreach import build_outreach
+from ..schemas import (
+    LeadDetail,
+    LeadListOut,
+    LeadSummary,
+    OutreachOut,
+    StatsOut,
+)
 
 router = APIRouter(prefix="/api", tags=["leads"])
 
@@ -43,6 +50,17 @@ def get_lead(lead_id: int, db: Session = Depends(get_db)):
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
     return LeadDetail.from_model(lead)
+
+
+@router.get("/leads/{lead_id}/outreach", response_model=OutreachOut)
+def get_lead_outreach(lead_id: int, db: Session = Depends(get_db)):
+    """Generate a ready-to-send outreach draft (email + call opener) for a lead."""
+    lead = repository.get_lead(db, lead_id)
+    if lead is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return OutreachOut(
+        **build_outreach(lead, lead.enrichment, list(lead.decision_makers))
+    )
 
 
 @router.get("/stats", response_model=StatsOut)

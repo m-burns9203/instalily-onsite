@@ -1,4 +1,4 @@
-"""Lead scoring — a transparent, explainable heuristic.
+"""Lead scoring - a transparent, explainable heuristic.
 
 A rule-based score (vs. a black-box model) is the right call at this stage: it's
 explainable to sales reps, deterministic, and easy to tune as the distributor
@@ -23,7 +23,7 @@ def _raw_components(lead: dict[str, Any]) -> list[dict[str, Any]]:
     """The per-factor contributions (unrounded) that make up a lead score.
 
     Returned as data so the same definition powers both the numeric score and
-    the explainable breakdown the UI shows reps — there is exactly one source
+    the explainable breakdown the UI shows reps - there is exactly one source
     of truth for "why is this lead an 87?".
     """
     rating = lead.get("rating") or 0
@@ -55,7 +55,7 @@ def _raw_components(lead: dict[str, Any]) -> list[dict[str, Any]]:
         {"label": "Certification", "points": cert_pts, "max": 30,
          "detail": cert or "Uncertified"},
         {"label": "Rating", "points": rating_pts, "max": 20,
-         "detail": f"{rating}★" if rating else "No rating"},
+         "detail": f"{rating}/5" if rating else "No rating"},
         {"label": "Review volume", "points": reviews_pts, "max": 20,
          "detail": f"{reviews} reviews"},
         {"label": "Proximity", "points": proximity_pts, "max": 15,
@@ -74,7 +74,7 @@ def score_components(lead: dict[str, Any]) -> list[dict[str, Any]]:
 
 def compute_lead_score(lead: dict[str, Any]) -> int:
     # Sum the rounded display components so the score always equals the sum of
-    # the factor bars the UI shows the rep — no off-by-one between ring + bars.
+    # the factor bars the UI shows the rep - no off-by-one between ring + bars.
     score = sum(c["points"] for c in score_components(lead))
     return int(max(0, min(100, score)))
 

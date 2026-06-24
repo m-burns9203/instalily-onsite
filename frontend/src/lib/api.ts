@@ -2,6 +2,7 @@ import type {
   Health,
   LeadDetail,
   LeadListResponse,
+  Outreach,
   RunStatus,
   Stats,
 } from "./types";
@@ -34,6 +35,7 @@ export const api = {
     return http<LeadListResponse>(`/api/leads?${params.toString()}`);
   },
   lead: (id: number) => http<LeadDetail>(`/api/leads/${id}`),
+  outreach: (id: number) => http<Outreach>(`/api/leads/${id}/outreach`),
   runsLatest: () => http<RunStatus>("/api/runs/latest"),
   runPipeline: (reenrich = false) =>
     http<{ mock_mode: boolean }>("/api/pipeline/run", {

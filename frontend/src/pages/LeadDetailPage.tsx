@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import type { LeadDetail } from "../lib/types";
 import { BandChip, CertBadge, ScoreRing, Stars } from "../components/Badges";
+import { OutreachPanel } from "../components/OutreachPanel";
 
 function Section({ title, icon, children }: { title: string; icon: string; children: ReactNode }) {
   return (
@@ -108,6 +109,9 @@ export function LeadDetailPage() {
         </div>
         {e?.summary && <p className="mt-5 leading-relaxed text-slate-700">{e.summary}</p>}
       </div>
+
+      {/* One-click, ready-to-send outreach draft */}
+      <OutreachPanel leadId={lead.id} />
 
       {!e ? (
         <p className="mt-6 text-slate-400">This lead has not been enriched yet.</p>

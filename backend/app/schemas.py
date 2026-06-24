@@ -165,6 +165,19 @@ class StatsOut(BaseModel):
     by_certification: dict[str, int]
 
 
+class OutreachContact(BaseModel):
+    name: str | None = None
+    title: str | None = None
+
+
+class OutreachOut(BaseModel):
+    subject: str
+    email_body: str
+    call_opener: str
+    talking_points: list[str] = []
+    contact: OutreachContact = OutreachContact()
+
+
 class RunRequest(BaseModel):
     zip_code: str | None = None
     radius: int | None = None

@@ -62,6 +62,14 @@ export interface LeadDetail extends LeadSummary {
   decision_makers: DecisionMaker[];
 }
 
+export interface Outreach {
+  subject: string;
+  email_body: string;
+  call_opener: string;
+  talking_points: string[];
+  contact: { name: string | null; title: string | null };
+}
+
 export interface RunStatus {
   status: string;
   run_id?: number;
