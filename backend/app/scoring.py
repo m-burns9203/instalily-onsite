@@ -14,6 +14,7 @@ from typing import Any
 _CERT_POINTS = {
     "Master Elite": 30,
     "President's Club": 25,
+    "Certified Plus": 22,
     "Certified": 15,
 }
 
